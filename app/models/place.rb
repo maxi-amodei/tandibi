@@ -15,4 +15,5 @@
 #  index_places_on_locale  (locale)
 #
 class Place < ApplicationRecord
+  validates :coordinate, :locale, :name, presence: true
 end
