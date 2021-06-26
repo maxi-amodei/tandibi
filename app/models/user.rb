@@ -25,33 +25,67 @@ class User < ApplicationRecord
   # Include default devise modules. Others available are:
   # :confirmable, :lockable, :timeoutable, :trackable and :omniauthable
   devise :database_authenticatable, :registerable,
-         :recoverable, :rememberable, :validatable
+         :recoverable, :rememberable, :validatable, authentication_keys: [:login], reset_password_keys: [:login]
+
+  attr_writer :login
+
+  def login
+    @login || username || email
+  end
+
+  def self.find_authenticatable(login)
+    where('username = :value OR email = :value', value: login).first
+  end
+
+  def self.find_for_database_authentication(conditions)
+    conditions = conditions.dup
+    login = conditions.delete(:login).downcase
+    find_authenticatable(login)
+  end
+
+  def self.send_reset_password_instructions(conditions)
+    recoverable = find_recoverable_or_init_with_errors(conditions)
+    recoverable.send_reset_password_instructions if recoverable.persisted?
+    recoverable
+  end
+
+  def self.find_recoverable_or_init_with_errors(conditions)
+    conditions = conditions.dup
+    login = conditions.delete(:login).downcase
+    recoverable = find_authenticatable(login)
+    unless recoverable
+      recoverable = new(login: login)
+      recoverable.errors.add(:login, login.present? ? :not_found : :blank)
+    end
+    recoverable
+  end
+
   has_many :posts
   has_many :bonds
   has_many :followings,
-    -> { where("bonds.state = ?", Bond::FOLLOWING) },
-    through: :bonds,
-    source: :friend
+           -> { where('bonds.state = ?', Bond::FOLLOWING) },
+           through: :bonds,
+           source: :friend
 
   has_many :follow_requests,
-    -> { Bond.requesting },
-    through: :bonds,
-    source: :friend
+           -> { Bond.requesting },
+           through: :bonds,
+           source: :friend
 
   has_many :inward_bonds,
-    class_name: "Bond",
-    foreign_key: :friend_id
+           class_name: 'Bond',
+           foreign_key: :friend_id
 
   has_many :followers,
-    -> { where("bonds.state = ?", Bond::FOLLOWING) },
-    through: :inward_bonds,
-    source: :user  
+           -> { where('bonds.state = ?', Bond::FOLLOWING) },
+           through: :inward_bonds,
+           source: :user
 
   validates :email, :username, uniqueness: true
   validates :first_name, :username, presence: true
-  validates :email, format: { 
+  validates :email, format: {
     with: URI::MailTo::EMAIL_REGEXP,
-    message: "must be a valid email address"
+    message: 'must be a valid email address'
   }
   before_save :ensure_proper_name_case
 
@@ -60,5 +94,4 @@ class User < ApplicationRecord
   def ensure_proper_name_case
     self.first_name = first_name.capitalize
   end
-
 end
