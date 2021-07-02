@@ -27,7 +27,36 @@ class User < ApplicationRecord
   devise :database_authenticatable, :registerable,
          :recoverable, :rememberable, :validatable, authentication_keys: [:login], reset_password_keys: [:login]
 
+  before_save :ensure_proper_name_case
   attr_writer :login
+
+  has_many :posts
+  has_many :bonds
+  has_many :followings,
+           -> { where('bonds.state = ?', Bond::FOLLOWING) },
+           through: :bonds,
+           source: :friend
+
+  has_many :follow_requests,
+           -> { Bond.requesting },
+           through: :bonds,
+           source: :friend
+
+  has_many :inward_bonds,
+           class_name: 'Bond',
+           foreign_key: :friend_id
+
+  has_many :followers,
+           -> { where('bonds.state = ?', Bond::FOLLOWING) },
+           through: :inward_bonds,
+           source: :user
+
+  validates :email, :username, uniqueness: true
+  validates :first_name, :username, presence: true
+  validates :email, format: {
+    with: URI::MailTo::EMAIL_REGEXP,
+    message: 'must be a valid email address'
+  }
 
   def login
     @login || username || email
@@ -60,34 +89,24 @@ class User < ApplicationRecord
     recoverable
   end
 
-  has_many :posts
-  has_many :bonds
-  has_many :followings,
-           -> { where('bonds.state = ?', Bond::FOLLOWING) },
-           through: :bonds,
-           source: :friend
+  def to_param
+    username
+  end
 
-  has_many :follow_requests,
-           -> { Bond.requesting },
-           through: :bonds,
-           source: :friend
+  # def name
+  #   if last_name
+  #     "#{first_name} #{last_name}"
+  #   else
+  #     first_name
+  #   end
+  # end
 
-  has_many :inward_bonds,
-           class_name: 'Bond',
-           foreign_key: :friend_id
-
-  has_many :followers,
-           -> { where('bonds.state = ?', Bond::FOLLOWING) },
-           through: :inward_bonds,
-           source: :user
-
-  validates :email, :username, uniqueness: true
-  validates :first_name, :username, presence: true
-  validates :email, format: {
-    with: URI::MailTo::EMAIL_REGEXP,
-    message: 'must be a valid email address'
-  }
-  before_save :ensure_proper_name_case
+  # def profile_picture_url
+  #   @profile_picture_url ||= begin
+  #     hash = Digest::MD5.hexdigest(email)
+  #     "https://www.gravatar.com/avatar/#{hash}?d=wavatar"
+  #   end
+  # end
 
   private
 
